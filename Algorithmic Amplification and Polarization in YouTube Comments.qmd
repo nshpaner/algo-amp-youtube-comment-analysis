@@ -1,0 +1,631 @@
+---
+title: "Algorithmic Amplification and Polarization in YouTube Comments"
+author: "Nick Shpaner"
+format: html
+editor: visual
+---
+
+## Load in Packages
+
+```{r}
+# The following packages will all be used in various parts of the study to generate graphs, run statistical tests, and more
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(boot)
+library(ggpubr)
+library(broom)
+library(rstatix)
+library(infer)
+library(effects)
+library(stringr)
+library(tidyr)
+```
+
+## Load in Data
+
+```{r}
+# Here is our full dataset (N = 20000)! Load it in and display the first 5 rows
+yt_data = read.csv("YouTube Comments Sentiment 20000 CSV.csv", encoding = "UTF-8")
+head(yt_data)
+```
+
+## EDA For Final Project
+
+## Proportion of Likes vs Sentiment Category
+
+```{r}
+# This function is used to prevent scientific notation
+options(scipen = 999)
+
+# We make a copy of our dataset where we distribute the Likes into our 3 different engagement categories
+yt_data_prop <- yt_data %>%
+  mutate(Like_Bucket = case_when(
+    Likes == 0 ~ "0 Likes",
+    Likes == 1 ~ "1 Like",
+    Likes >= 2 ~ "2+ Likes"
+  )) %>%
+  mutate(Like_Bucket = factor(Like_Bucket, levels = c("0 Likes", "1 Like", "2+ Likes")))
+
+# Create a summary table with different proportions across Sentiments and engagement thresholds for Likes, displaying counts of comments
+summary_table <- yt_data_prop %>%
+  group_by(Sentiment, Like_Bucket) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(Sentiment) %>%
+  mutate(proportion = n / sum(n))
+
+summary_table
+
+# Using the summary table, we create a stacked bar chart to visualize the results
+ggplot(summary_table, aes(x = Sentiment, y = proportion, fill = Like_Bucket)) +
+  geom_bar(stat = "identity", position = "fill", color = "white") +
+  scale_y_continuous(labels = percent) +
+  geom_text(aes(label = percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), size = 4) +
+  labs(title = "Like Distribution by Sentiment",
+       subtitle = "(n = 20,000)",
+       y = "Percentage of Comments",
+       fill = "Engagement Level") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Blues")
+```
+
+## Statistical Test (Proportion of Likes vs Sentiment)
+
+```{r}
+# Here, we create a contingency table, which we use to gauge the statistical relationship between Proportion of Likes vs Sentiment using the raw comment counts for each engagement threshold
+contingency_table <- table(yt_data_prop$Sentiment, yt_data_prop$Like_Bucket)
+chisq.test(contingency_table)
+```
+
+## Bootstrapping (Proportion of 2+ Likes vs Sentiment)
+
+```{r}
+# Here, we are calculating the Bootstrap Proportion of 2+ Likes for Positive Sentiment. The function below is used to return the mean of high-engagement metrics
+prop_2plus_func <- function(data, indices) {
+  return(mean(data[indices] >= 2))
+}
+
+# We extrapolate the comments with Positive Sentiment and run a boostrap resample (R = 1000). Additionally, we set a seed for reproducibility
+pos_likes_prop <- yt_data_prop$Likes[yt_data_prop$Sentiment == "Positive"]
+set.seed(123)
+boot_prop_pos <- boot(data = pos_likes_prop, statistic = prop_2plus_func, R = 1000)
+
+# Now, we calculate the 95% confidence intervals (CIs) and actual value for Positive Sentiment. The results used for Figure E in the final study were derived from these values
+boot_ci_results_pos <- boot.ci(boot_prop_pos, type = "perc")
+ci_low_pos <- boot_ci_results_pos$percent[4]
+ci_high_pos <- boot_ci_results_pos$percent[5]
+actual_val_pos <- boot_prop_pos$t0
+boot_df_prop_pos <- data.frame(props = boot_prop_pos$t)
+
+# Finally, we create a histogram that visualizes the bootstrapped results for conveinence
+ggplot(boot_df_prop_pos, aes(x = props)) +
+  geom_histogram(bins = 30, fill = "#69b3a2", color = "white", alpha = 0.8) +
+  geom_vline(xintercept = ci_low_pos, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = ci_high_pos, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = actual_val_pos, color = "black", size = 1.2) +
+  scale_x_continuous(labels = percent_format(accuracy = 0.1)) +
+  labs(title = "Bootstrap Distribution: % of Positive Comments with 2+ Likes (1000 Shuffles)",
+       subtitle = "Black line = Actual Proportion | Red dashed = 95% CI",
+       x = "Proportion of Comments",
+       y = "Frequency",
+       caption = paste0("Actual: ", round(actual_val_pos*100, 2), 
+                        "%, 95% CI: [", round(ci_low_pos*100, 2), 
+                        "%, ", round(ci_high_pos*100, 2), "%]")) +
+  theme_minimal()
+```
+
+```{r}
+# Here, we are calculating the Bootstrap Proportion of 2+ Likes for Neutral Sentiment
+
+# We extrapolate the comments with Neutral Sentiment and run a boostrap resample (R = 1000). Additionally, we set a seed for reproducibility
+neut_likes_prop <- yt_data_prop$Likes[yt_data_prop$Sentiment == "Neutral"]
+set.seed(123)
+boot_prop_neut <- boot(data = neut_likes_prop, statistic = prop_2plus_func, R = 1000)
+
+# Now, we calculate the 95% confidence intervals (CIs) and actual value for Neutral Sentiment. The results used for Figure E in the final study were derived from these values
+boot_ci_results_neut <- boot.ci(boot_prop_neut, type = "perc")
+ci_low_neut <- boot_ci_results_neut$percent[4]
+ci_high_neut <- boot_ci_results_neut$percent[5]
+actual_val_neut <- boot_prop_neut$t0
+boot_df_prop_neut <- data.frame(props = boot_prop_neut$t)
+
+# Finally, we create a histogram that visualizes the bootstrapped results for conveinence
+ggplot(boot_df_prop_neut, aes(x = props)) +
+  geom_histogram(bins = 30, fill = "#69b3a2", color = "white", alpha = 0.8) +
+  geom_vline(xintercept = ci_low_neut, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = ci_high_neut, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = actual_val_neut, color = "black", size = 1.2) +
+  scale_x_continuous(labels = percent_format(accuracy = 0.1)) +
+  labs(title = "Bootstrap Distribution: % of Neutral Comments with 2+ Likes (1000 Shuffles)",
+       subtitle = "Black line = Actual Proportion | Red dashed = 95% CI",
+       x = "Proportion of Comments",
+       y = "Frequency",
+       caption = paste0("Actual: ", round(actual_val_neut*100, 2), 
+                        "%, 95% CI: [", round(ci_low_neut*100, 2), 
+                        "%, ", round(ci_high_neut*100, 2), "%]")) +
+  theme_minimal()
+```
+
+```{r}
+# Here, we are calculating the Bootstrap Proportion of 2+ Likes for Negative Sentiment.
+
+# We extrapolate the comments with Negative Sentiment and run a boostrap resample (R = 1000). Additionally, we set a seed for reproducibility
+neg_likes_prop <- yt_data_prop$Likes[yt_data_prop$Sentiment == "Negative"]
+set.seed(123)
+boot_prop_neg <- boot(data = neg_likes_prop, statistic = prop_2plus_func, R = 1000)
+
+# Now, we calculate the 95% confidence intervals (CIs) and actual value for Negative Sentiment. The results used for Figure E in the final study were derived from these values
+boot_ci_results_neg <- boot.ci(boot_prop_neg, type = "perc")
+ci_low_neg <- boot_ci_results_neg$percent[4]
+ci_high_neg <- boot_ci_results_neg$percent[5]
+actual_val_neg <- boot_prop_neg$t0
+boot_df_prop_neg <- data.frame(props = boot_prop_neg$t)
+
+# Finally, we create a histogram that visualizes the bootstrapped results for conveinence
+ggplot(boot_df_prop_neg, aes(x = props)) +
+  geom_histogram(bins = 30, fill = "#69b3a2", color = "white", alpha = 0.8) +
+  # Add the 95% Confidence Interval (Red Dashed Lines)
+  geom_vline(xintercept = ci_low_neg, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = ci_high_neg, color = "red", linetype = "dashed", size = 1) +
+  # Add the Actual (Observed) Value (Solid Black Line)
+  geom_vline(xintercept = actual_val_neg, color = "black", size = 1.2) +
+  # Formatting
+  scale_x_continuous(labels = percent_format(accuracy = 0.1)) +
+  labs(title = "Bootstrap Distribution: % of Negative Comments with 2+ Likes (1000 Shuffles)",
+       subtitle = "Black line = Actual Proportion | Red dashed = 95% CI",
+       x = "Proportion of Comments",
+       y = "Frequency",
+       caption = paste0("Actual: ", round(actual_val_neg*100, 2), 
+                        "%, 95% CI: [", round(ci_low_neg*100, 2), 
+                        "%, ", round(ci_high_neg*100, 2), "%]")) +
+  theme_minimal()
+```
+
+## Proportion of Likes vs Video Category
+
+```{r}
+# We create a summary table for Video Category and their Proportions of High-Engagement (2+) Likes
+category_summary <- yt_data_prop %>%
+  mutate(High_Engagement = ifelse(Likes >= 2, 1, 0)) %>%
+  group_by(`Video.Category`) %>%
+  summarise(
+    Total_Comments = n(),
+    Prop_2Plus = mean(High_Engagement),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(Prop_2Plus))
+
+print(category_summary)
+
+# We create a descending bar graph visualizing the results
+ggplot(category_summary, aes(x = reorder(`Video.Category`, Prop_2Plus), y = Prop_2Plus, fill = `Video.Category`)) +
+  geom_bar(stat = "identity") +
+  coord_flip() + # Makes long category names easier to read
+  scale_y_continuous(labels = percent) +
+  geom_text(aes(label = percent(Prop_2Plus, accuracy = 0.1)), hjust = -0.1) +
+  labs(title = "Proportion of Comments with 2+ Likes by Video Category",
+       subtitle = "(n = 5266)",
+       x = "Video Category",
+       y = "Percent of Comments with 2+ Likes") +
+  theme_minimal() +
+  guides(fill = "none")
+```
+
+![](images/clipboard-3963201654.png)
+
+## Statistical Test (Proportion of Likes vs Video Category)
+
+```{r}
+# Here, we create a contingency table, which we use to gauge the statistical relationship between the number of high-engagemnent comments (for Likes) and the Video Category
+cat_table <- table(yt_data_prop$`Video.Category`, yt_data_prop$Likes >= 2)
+print(chisq.test(cat_table))
+```
+
+## Bootstrapping (Proportion of Likes vs Video Category)
+
+```{r}
+# We create this function to get a bootstrapped CI for a group
+get_boot_ci <- function(likes_vector) {
+  res <- boot(data = likes_vector, statistic = prop_2plus_func, R = 1000)
+  ci <- boot.ci(res, type = "perc")
+  return(data.frame(
+    observed = res$t0,
+    low = ci$percent[4],
+    high = ci$percent[5]
+  ))
+}
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Compile the bootstrapped results across all Video Categories
+category_results <- yt_data_prop %>%
+  group_by(Video.Category) %>%
+  summarise(stats = list(get_boot_ci(Likes)), .groups = 'drop') %>%
+  tidyr::unnest(stats)
+
+# Make a forest plot visualizing the results
+ggplot(category_results, aes(x = reorder(Video.Category, observed), y = observed)) +
+  geom_point(size = 3, color = "darkblue") +
+  geom_errorbar(aes(ymin = low, ymax = high), width = 0.3) +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Comparison of 2+ Like Proportions by Category (R = 1000)",
+       subtitle = "Error bars represent 95% Bootstrapped Confidence Intervals",
+       x = "Video Category",
+       y = "Proportion of Comments with 2+ Likes") +
+  theme_minimal()
+```
+
+## Logistic Regression (Proportion of Likes vs Video Category)
+
+```{r}
+# Extract the Sentiments from the dataset, using Neutral as the reference point
+yt_data_prop$Sentiment <- relevel(factor(yt_data_prop$Sentiment), ref = "Neutral")
+
+# Create a binary outcome, filtering out the low-engagement (Likes) comments
+yt_data_prop$target <- ifelse(yt_data_prop$Likes >= 2, 1, 0)
+
+# Run the model with Sentiment and Video Category as the predictors. Due to the binary structure, we use the Binomial distribution for the "family" command
+model <- glm(target ~ Sentiment + Video.Category, data = yt_data_prop, family = "binomial")
+summary(model)
+```
+
+## Probability Plot (Proportion of Likes vs Video Category)
+
+```{r}
+# We compute and visualize the probability (using the model) of a comment being of a given Sentiment
+sent_effect <- as.data.frame(effect("Sentiment", model))
+ggplot(sent_effect, aes(x = Sentiment, y = fit)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Predicted Probability of 2+ Likes by Sentiment",
+       subtitle = "Adjusted for Video Category (Neutral is Baseline)",
+       y = "Probability (%)", x = "Sentiment") +
+  theme_minimal()
+```
+
+## Odds Ratio (Proportion of Likes vs Video Category)
+
+```{r}
+# Compile our Likes model results from before and clean them in preparation for visualization. The Log-Odds (Estimates) are converted to Odds Ratios, and the 95% CI bounds are calculated and provided
+model_results <- tidy(model, conf.int = TRUE, exponentiate = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(clean_term = str_remove_all(term, "Sentiment|Video.Category") %>% str_replace_all("\\.", " "))
+
+# Update reference data to include Neutral as the Sentiment and Autos & Vehicles as the Video Category (originally, the Sentiment was set to Negative, but this code ensures that it's Neutral instead)
+reference_data <- data.frame(
+  clean_term = c("Neutral", "Autos & Vehicles"), 
+  estimate = c(1, 1), conf.low = c(1, 1), conf.high = c(1, 1)
+)
+
+# Bind the rows from the results and reference data to prepare for visualization
+plot_data <- bind_rows(model_results, reference_data)
+
+# Finally, create a forest plot with the baseline OR = 1.0 to plot the results
+ggplot(plot_data, aes(x = reorder(clean_term, estimate), y = estimate)) +
+  geom_point(size = 3, color = "#2c3e50") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.4) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red", size = 0.8) +
+  coord_flip() + scale_y_log10(breaks = c(0.2, 0.5, 1, 2, 5, 10)) + 
+  labs(title = "Full Impact Analysis: Sentiment & Category (Likes)",
+       subtitle = "Odds Ratios (Baseline = 1.0) | Neutral Sentiment is the reference point",
+       x = "Predictor", y = "Odds Ratio") +
+  theme_minimal()
+```
+
+## Proportion of Replies vs Sentiment Category
+
+```{r}
+# We make a copy of our dataset where we distribute the Replies into our 3 different engagement categories
+yt_data_prop_rep <- yt_data %>%
+  mutate(Reply_Bucket = case_when(
+    Replies == 0 ~ "0 Replies",
+    Replies == 1 ~ "1 Reply",
+    Replies >= 2 ~ "2+ Replies"
+  )) %>%
+  mutate(Reply_Bucket = factor(Reply_Bucket, levels = c("0 Replies", "1 Reply", "2+ Replies")))
+
+# Create a summary table with different proportions across Sentiments and engagement thresholds for Replies, displaying counts of comments
+summary_table_rep <- yt_data_prop_rep %>%
+  group_by(Sentiment, Reply_Bucket) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(Sentiment) %>%
+  mutate(proportion = n / sum(n))
+
+# Using the summary table, we create a stacked bar chart to visualize the results
+ggplot(summary_table_rep, aes(x = Sentiment, y = proportion, fill = Reply_Bucket)) +
+  geom_bar(stat = "identity", position = "fill", color = "white") +
+  scale_y_continuous(labels = percent) +
+  geom_text(aes(label = percent(proportion, accuracy = 0.1)), 
+            position = position_stack(vjust = 0.5), size = 4) +
+  labs(title = "Reply Distribution by Sentiment",
+       subtitle = "(n = 20,000)",
+       y = "Percentage of Comments",
+       fill = "Engagement Level") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Purples") # Using Purples to distinguish from Likes
+```
+
+## Statistical Test (Proportion of Replies vs Sentiment)
+
+```{r}
+# Here, we create a contingency table, which we use to gauge the statistical relationship between Proportion of Replies vs Sentiment using the raw comment counts for each engagement threshold
+contingency_table_rep <- table(yt_data_prop_rep$Sentiment, yt_data_prop_rep$Reply_Bucket)
+chisq.test(contingency_table_rep)
+```
+
+## Bootstrapping (Proportion of 2+ Replies vs Sentiment)
+
+```{r}
+# Here, we are calculating the Bootstrap Proportion of 2+ Replies for each Sentiment. The function below is used to return the mean of high-engagement metrics (this time for Replies)
+prop_2plus_rep_func <- function(data, indices) {
+  return(mean(data[indices] >= 2))
+}
+
+# I figured out how to make the bootstrapping process more efficient this time around compared to the Likes data without fundamentally altering the results. Here, we comprehensively run the bootstrap for each Sentiment, and once again set the seed for reproducibility
+sentiments <- c("Positive", "Neutral", "Negative")
+for (s in sentiments) {
+  subset_data <- yt_data_prop_rep$Replies[yt_data_prop_rep$Sentiment == s]
+  set.seed(123)
+  boot_res <- boot(data = subset_data, statistic = prop_2plus_rep_func, R = 1000)
+  
+# Now, we calculate the 95% confidence intervals (CIs) and actual value for all Sentiments. The results used for Figure F in the final study were derived from these values
+  ci <- boot.ci(boot_res, type = "perc")
+  boot_df <- data.frame(props = boot_res$t)
+  
+# Finally, we create a histogram that visualizes the bootstrapped results for conveinence
+  p <- ggplot(boot_df, aes(x = props)) +
+    geom_histogram(bins = 30, fill = "#9b59b6", color = "white", alpha = 0.8) +
+    geom_vline(xintercept = ci$percent[4], color = "red", linetype = "dashed") +
+    geom_vline(xintercept = ci$percent[5], color = "red", linetype = "dashed") +
+    geom_vline(xintercept = boot_res$t0, color = "black", size = 1.2) +
+    scale_x_continuous(labels = percent_format(accuracy = 0.1)) +
+    labs(title = paste("Bootstrap Distribution: % of", s, "Comments with 2+ Replies"),
+         subtitle = paste("Actual:", round(boot_res$t0*100, 2), "%"),
+         x = "Proportion", y = "Frequency") +
+    theme_minimal()
+  print(p)
+}
+```
+
+## Proportion of Replies vs Video Category
+
+```{r}
+# We create a summary table for Video Category and their Proportions of High-Engagement (2+) Replies
+category_summary_rep <- yt_data_prop_rep %>%
+  mutate(High_Engagement = ifelse(Replies >= 2, 1, 0)) %>%
+  group_by(Video.Category) %>%
+  summarise(
+    Total_Comments = n(),
+    Prop_2Plus = mean(High_Engagement),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(Prop_2Plus))
+
+# We create a descending bar graph visualizing the results
+ggplot(category_summary_rep, aes(x = reorder(Video.Category, Prop_2Plus), y = Prop_2Plus, fill = Video.Category)) +
+  geom_bar(stat = "identity") +
+  # Add geom_text for data labels
+  geom_text(aes(label = percent(Prop_2Plus, accuracy = 0.1)), 
+            hjust = -0.1, size = 3.5) + 
+  coord_flip() +
+  # Expand the y-axis slightly so the text labels don't get cut off
+  scale_y_continuous(labels = percent, expand = expansion(mult = c(0, 0.15))) +
+  labs(title = "Proportion of Comments with 2+ Replies by Video Category",
+       subtitle = "(n = 2336)",
+       x = "Video Category", y = "Percent of Comments with 2+ Replies") +
+  theme_minimal() + 
+  guides(fill = "none")
+
+# Statistical Test (Categories)
+chisq.test(table(yt_data_prop_rep$Video.Category, yt_data_prop_rep$Replies >= 2))
+```
+
+## Statistical Test (Proportion of Replies vs Video Category)
+
+```{r}
+# Here, we create a contingency table, which we use to gauge the statistical relationship between the number of high-engagemnent comments (for Replies) and the Video Category
+rep_table <- table(yt_data_prop_rep$`Video.Category`, yt_data_prop_rep$Replies >= 2)
+print(chisq.test(rep_table))
+```
+
+## Bootstrapping (Proportion of Replies vs Video Category)
+
+```{r}
+# We reuse the get_boot_ci function updated for Replies, and set the seed for reproducibility
+get_boot_ci_rep <- function(replies_vector) {
+  res <- boot(data = replies_vector, statistic = prop_2plus_rep_func, R = 1000)
+  ci <- boot.ci(res, type = "perc")
+  return(data.frame(observed = res$t0, low = ci$percent[4], high = ci$percent[5]))
+}
+set.seed(123)
+
+# Compile the bootstrapped results across all Video Categories
+category_results_rep <- yt_data_prop_rep %>%
+  group_by(Video.Category) %>%
+  summarise(stats = list(get_boot_ci_rep(Replies)), .groups = 'drop') %>%
+  tidyr::unnest(stats)
+
+# Make a forest plot visualizing the results
+ggplot(category_results_rep, aes(x = reorder(Video.Category, observed), y = observed)) +
+  geom_point(size = 3, color = "#8e44ad") +
+  geom_errorbar(aes(ymin = low, ymax = high), width = 0.3) +
+  coord_flip() + 
+  scale_y_continuous(labels = percent) +
+  labs(title = "Comparison of 2+ Reply Proportions by Category (R = 1000)",
+       subtitle = "Error bars represent 95% Bootstrapped Confidence Intervals",
+       x = "Video Category",
+       y = "Proportion of Comments with 2+ Replies") +
+  theme_minimal()
+```
+
+## Logistic Regression (Proportion of Replies vs Video Category)
+
+```{r}
+# Extract the Sentiments from the dataset, using Neutral as the reference point
+yt_data_prop_rep$Sentiment <- relevel(factor(yt_data_prop_rep$Sentiment), ref = "Neutral")
+
+# Create a binary outcome, filtering out the low-engagement (Replies) comments
+yt_data_prop_rep$target_rep <- ifelse(yt_data_prop_rep$Replies >= 2, 1, 0)
+
+# Run the model for Replies with Sentiment and Video Category as the predictors. Due to the binary structure, we use the Binomial distribution for the "family" command
+model_rep <- glm(target_rep ~ Sentiment + Video.Category, data = yt_data_prop_rep, family = "binomial")
+summary(model_rep)
+```
+
+## Probability Plot (Proportion of Replies vs Video Category)
+
+```{r}
+# We compute and visualize the probability (using the model) of a comment being of a given Sentiment
+sent_effect_rep <- as.data.frame(effect("Sentiment", model_rep))
+ggplot(sent_effect_rep, aes(x = Sentiment, y = fit)) +
+  geom_point(size = 4, color = "#8e44ad") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Predicted Probability of 2+ Replies by Sentiment",
+       subtitle = "Adjusted for Video Category (Neutral is Baseline)", y = "Probability (%)") +
+  theme_minimal()
+```
+
+## Odds Ratio (Proportion of Replies vs Video Category)
+
+```{r}
+# Compile our Replies model results from before and clean them in preparation for visualization. The Log-Odds (Estimates) are converted to Odds Ratios, and the 95% CI bounds are calculated and provided
+model_results_rep <- tidy(model_rep, conf.int = TRUE, exponentiate = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(clean_term = str_remove_all(term, "Sentiment|Video.Category") %>% str_replace_all("\\.", " "))
+
+# Update reference data to include Neutral as the Sentiment and Autos & Vehicles as the Video Category (originally, the Sentiment was set to Negative, but this code ensures that it's Neutral instead)
+reference_data_rep <- data.frame(
+  clean_term = c("Neutral", "Autos & Vehicles"), 
+  estimate = c(1, 1), conf.low = c(1, 1), conf.high = c(1, 1)
+)
+
+# Bind the rows from the results and reference data to prepare for visualization
+plot_data_rep <- bind_rows(model_results_rep, reference_data_rep)
+
+# Finally, create a forest plot with the baseline OR = 1.0 to plot the results
+ggplot(plot_data_rep, aes(x = reorder(clean_term, estimate), y = estimate)) +
+  geom_point(size = 3, color = "#4b0082") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.4) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") +
+  coord_flip() + scale_y_log10(breaks = c(0.2, 0.5, 1, 2, 5, 10)) + 
+  labs(title = "Full Impact Analysis: Sentiment & Category (Replies)",
+       subtitle = "Odds Ratios (Baseline = 1.0) | Neutral is reference",
+       x = "Predictor", y = "Odds Ratio") +
+  theme_minimal()
+```
+
+## News and Politics (Longitudinal Analysis)
+
+```{r}
+# Filter down to News & Politics, take high-engagement comments, and summarize the results
+news_trends <- yt_data %>%
+  filter(Video.Category == "News & Politics") %>%
+  group_by(Year) %>%
+  summarise(
+    Avg_Likes = mean(Likes),
+    Avg_Replies = mean(Replies),
+    Prop_High_Likes = mean(Likes >= 2),
+    Prop_High_Replies = mean(Replies >= 2),
+    Total_Comments = n(),
+    .groups = 'drop'
+  )
+
+# Adjust the dataset and reshape it for plotting (Long format)
+news_trends_long <- news_trends %>%
+  select(Year, Prop_High_Likes, Prop_High_Replies) %>%
+  pivot_longer(cols = starts_with("Prop"), 
+               names_to = "Engagement_Type", 
+               values_to = "Proportion") %>%
+  mutate(Engagement_Type = ifelse(Engagement_Type == "Prop_High_Likes", "2+ Likes", "2+ Replies"))
+```
+
+## Visualization (Longitudinal Analysis)
+
+```{r}
+# Use a line plot to visualize the results for both Likes and Replies
+ggplot(news_trends_long, aes(x = Year, y = Proportion, color = Engagement_Type, group = Engagement_Type)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  scale_y_continuous(labels = percent) +
+  scale_x_continuous(breaks = min(news_trends$Year):max(news_trends$Year)) +
+  labs(title = "Engagement Evolution in News & Politics",
+       subtitle = "Proportion of comments receiving significant engagement (2+) by Year",
+       x = "Year", y = "Proportion of Comments",
+       color = "Metric") +
+  theme_minimal() +
+  scale_color_manual(values = c("2+ Likes" = "#2980b9", "2+ Replies" = "#8e44ad"))
+```
+
+## Statistical Test (Longitudinal Analysis)
+
+```{r}
+# Here, we run our Spearnan Rank Correlation tests for both Likes and Replies to see if Year is a significant predictor of engagement for News & Politics
+cor.test(news_trends$Year, news_trends$Prop_High_Likes, method = "spearman")
+cor.test(news_trends$Year, news_trends$Prop_High_Replies, method = "spearman")
+```
+
+## Logistic Regression (Longitudinal Analysis: Likes)
+
+```{r}
+# Similar to before, we run the logistic regression for Likes to see if the odds of getting a like increase per year
+news_data_only <- yt_data_prop %>% filter(Video.Category == "News & Politics")
+
+# Run the model with Sentiment and Year as the predictors. Due to the binary structure, we use the Binomial distribution for the "family" command
+year_model <- glm(target ~ Year + Sentiment, data = news_data_only, family = "binomial")
+summary(year_model)
+```
+
+## Logistic Regression (Longitudinal Analysis: Replies)
+
+```{r}
+# Similar to before, we run the logistic regression for Replies to see if the odds of getting a like increase per year
+news_data_only_rep <- yt_data_prop_rep %>% filter(Video.Category == "News & Politics")
+
+# Run the model with Sentiment and Year as the predictors. Due to the binary structure, we use the Binomial distribution for the "family" command
+year_model_rep <- glm(target_rep ~ Year + Sentiment, data = news_data_only_rep, family = "binomial")
+summary(year_model_rep)
+```
+
+## Odds Ratio (Longitudinal Analysis)
+
+```{r}
+# Here, we tidy both models and add a metric label to apply it to both engagement metrics. Just like with the other models, the Log-Odds (Estimates) are converted to Odds Ratios, and the 95% CI bounds are calculated and provided
+likes_or <- tidy(year_model, exponentiate = TRUE, conf.int = TRUE) %>% 
+  mutate(Metric = "Likes")
+
+replies_or <- tidy(year_model_rep, exponentiate = TRUE, conf.int = TRUE) %>% 
+  mutate(Metric = "Replies")
+
+# Combine the Odds Ratios for both mertics and filter out the Intercept (it's usually not useful for plotting)
+plot_data_long <- bind_rows(likes_or, replies_or) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(term = case_when(
+    term == "Year" ~ "Year (Annual Change)",
+    term == "SentimentNegative" ~ "Negative Sentiment",
+    term == "SentimentPositive" ~ "Positive Sentiment",
+    TRUE ~ term
+  ))
+
+# Finally, create a forest plot with the baseline OR = 1.0 to plot the results
+ggplot(plot_data_long, aes(x = estimate, y = term, color = Metric)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray60") + 
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.3, size = 0.8) +
+  geom_point(size = 3.5) +
+  facet_wrap(~Metric, ncol = 1) +
+  scale_x_log10(breaks = c(0.7, 1, 1.5, 2, 3, 4)) + # Log scale is best for ORs
+  scale_color_manual(values = c("Likes" = "#2980b9", "Replies" = "#e67e22")) +
+  labs(
+    title = "Longitudinal Odds Ratios: News & Politics Engagement",
+    subtitle = "Odds of reaching 2+ engagement threshold (Ref: Neutral Sentiment)",
+    x = "Odds Ratio",
+    y = "Measured Category"
+  ) +
+  theme_minimal() +
+  theme(panel.grid.minor = element_blank(),
+        strip.text = element_text(face = "bold", size = 12))
+```
