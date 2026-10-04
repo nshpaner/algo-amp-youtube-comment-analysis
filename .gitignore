@@ -1,4 +1,31 @@
+# Ignore the big raw data
+youtube-comments-sentiment.csv
+
+# Ignore all other CSVs
 *.csv
-*.zip
-youtube-comments-sentiment.csv
-youtube-comments-sentiment.csv
+
+# BUT allow the 20,000 row sample
+!YouTube\ Comments\ Sentiment\ 20000\ CSV.csv
+
+# History & Session Data
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# renv environment isolation
+# (Tracks configuration, but ignores downloaded library binaries)
+renv/library/
+renv/python/
+renv/staging/
+
+# Quarto & Knitr rendering outputs (keeps git clean)
+*_files/
+*_cache/
+.quarto/
+*.html
+*.pdf
+
+# Operating System files
+.DS_Store
+Thumbs.db

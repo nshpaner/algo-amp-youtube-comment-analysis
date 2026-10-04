@@ -1,0 +1,15 @@
+# install_deps.R
+# R Version: 4.5.2
+
+# R Package Dependencies for algo_amp_yt_comm
+ggplot2
+dplyr
+scales
+boot
+ggpubr
+broom
+rstatix
+infer
+effects
+stringr
+tidyr

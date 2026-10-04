@@ -7,26 +7,68 @@ editor: visual
 
 ## Load in Packages
 
-```{r}
-# The following packages will all be used in various parts of the study to generate graphs, run statistical tests, and more
-library(ggplot2)
-library(dplyr)
-library(scales)
-library(boot)
-library(ggpubr)
-library(broom)
-library(rstatix)
-library(infer)
-library(effects)
-library(stringr)
-library(tidyr)
+```{r setup, include=FALSE}
+# Configuration & Repository setup
+cran_url <- "[https://cloud.r-project.org](https://cloud.r-project.org)"
+
+# Locate install_deps.txt reliably across project paths
+deps_path <- if (file.exists("install_deps.txt")) {
+  "install_deps.txt"
+} else if (file.exists("../install_deps.txt")) {
+  "../install_deps.txt"
+} else if (requireNamespace("here", quietly = TRUE) && file.exists(here::here("install_deps.txt"))) {
+  here::here("install_deps.txt")
+} else {
+  NULL
+}
+
+# Explicitly pre-install heavy sub-dependencies required by effects, rstatix, and ggpubr
+core_subdeps <- c("car", "carData", "pbkrtest", "lme4", "rio")
+missing_subdeps <- core_subdeps[!(core_subdeps %in% rownames(installed.packages()))]
+
+if (length(missing_subdeps) > 0) {
+  message("Installing required sub-dependencies: ", paste(missing_subdeps, collapse = ", "))
+  utils::install.packages(missing_subdeps, repos = cran_url)
+}
+
+# Parse install_deps.txt and install missing primary dependencies
+if (!is.null(deps_path)) {
+  raw_lines <- readLines(deps_path, warn = FALSE)
+  cleaned   <- trimws(raw_lines)
+  pkg_list  <- cleaned[!grepl("^#", cleaned) & cleaned != ""]
+  
+  missing_pkgs <- pkg_list[!(pkg_list %in% rownames(installed.packages()))]
+  
+  if (length(missing_pkgs) > 0) {
+    message("Installing missing packages: ", paste(missing_pkgs, collapse = ", "))
+    utils::install.packages(missing_pkgs, repos = cran_url)
+  }
+}
+
+# Load all 11 required packages cleanly into session
+packages_to_load <- c(
+  "ggplot2", "dplyr", "tidyr", "stringr", "scales", 
+  "broom", "infer", "effects", "rstatix", "ggpubr", "boot"
+)
+
+for (pkg in packages_to_load) {
+  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    utils::install.packages(pkg, repos = cran_url)
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# Verify load status for all 11 packages
+required_pkgs <- c("ggplot2", "dplyr", "scales", "boot", "ggpubr", "broom", "rstatix", "infer", "effects", "stringr", "tidyr")
+load_status <- setNames(required_pkgs %in% (.packages()), required_pkgs)
+print(load_status)
 ```
 
 ## Load in Data
 
 ```{r}
 # Here is our full dataset (N = 20000)! Load it in and display the first 5 rows
-yt_data = read.csv("YouTube Comments Sentiment 20000 CSV.csv", encoding = "UTF-8")
+yt_data = read.csv("../dataset/YouTube Comments Sentiment 20000 CSV.csv", encoding = "UTF-8")
 head(yt_data)
 ```
 
