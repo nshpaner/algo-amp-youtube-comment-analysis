@@ -27,6 +27,6 @@ Required R Packages: tidyverse (ggplot2, dplyr, tidyr, stringr), scales, broom, 
 
 Clone the repo:
 
-Bash
 git clone git@github.com:nshpaner/algo-amp-youtube-comment-analysis.git
+
 cd algo-amp-youtube-comment-analysis
