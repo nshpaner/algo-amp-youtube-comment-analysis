@@ -1,5 +1,6 @@
-# Ignore the big raw data
+# Ignore these major files/folders
 youtube-comments-sentiment.csv
+Algorithmic-Amplification-and-Polarization-in-YouTube-Comments_files
 
 # Ignore all other CSVs
 *.csv
@@ -7,25 +8,26 @@ youtube-comments-sentiment.csv
 # BUT allow the 20,000 row sample
 !YouTube\ Comments\ Sentiment\ 20000\ CSV.csv
 
-# History & Session Data
+# R history & user files
 .Rhistory
 .RData
 .Ruserdata
+
+# RStudio project metadata (if you don't want to track Rproj/profile)
 .Rproj.user/
 
-# renv environment isolation
-# (Tracks configuration, but ignores downloaded library binaries)
+# renv package binaries (keep renv/activate.R and renv/settings.json tracked)
 renv/library/
 renv/python/
 renv/staging/
 
-# Quarto & Knitr rendering outputs (keeps git clean)
+# Quarto / HTML rendering artifacts
 *_files/
 *_cache/
 .quarto/
 *.html
 *.pdf
 
-# Operating System files
+# OS junk
 .DS_Store
 Thumbs.db

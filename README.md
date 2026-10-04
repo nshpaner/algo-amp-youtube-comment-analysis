@@ -4,16 +4,19 @@ An end-to-end reproducible R data science project analyzing sentiment dynamics a
 
 ## Repo Structure
 
-algo_amp_yt_comm/
-├── dataset/
-│   ├── YouTube Comments Sentiment 20000 CSV.csv
-│   └── yt_comm_codebook.txt
-├── code+nb/
-│   └── algo_amp_yt_comm_nb.qmd
-├── install_deps.txt
-├── LICENSE
-├── README.md
-└── .gitignore
+algo_amp_yt_comm:
+
+dataset:
+	YouTube Comments Sentiment 20000 CSV.csv
+	yt_comm_codebook.txt
+ 
+code+nb:
+	algo_amp_yt_comm_nb.qmd
+
+install_deps.txt
+LICENSE
+README.md
+.gitignore
 
 ## Environment & Requirements
 R Version: 4.5.2
